@@ -1,0 +1,86 @@
+name: $(Date:yyyy-MM-dd)-$(Rev:r)
+
+variables:
+- group: Java-Gatling
+- group: celula-testing
+
+jobs:
+- job: GatlingTestJob
+  steps:
+
+  - task: Maven@4
+    inputs:
+      mavenPomFile: 'pom.xml'
+      goals: 'test'
+      options: '-DskipTests=true'
+    displayName: 'Build Gatling project'
+    
+  - script: |
+      mvn gatling:test -DbaseURL=$(baseURL) -Dgatling.simulationClass=microservices.simulations.CelulaTestplan -Dusers=$(Dusers) -Dramp=$(Dramp)
+    displayName: 'Run Gatling Simulation'
+
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: 'target/gatling'
+      artifact: 'gatling-results'
+      publishLocation: 'pipeline'
+    displayName: 'Prepare Gatling Reports'
+
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: 'target/gatling'
+      includeRootFolder: true
+      archiveType: 'zip'
+      archiveFile: 'target/gatling/Report-$(Build.BuildNumber).zip'
+      replaceExistingArchive: true
+
+  - task: UploadReportToAzureDevopsWiki@0
+    inputs:
+      Tokenuser: '$(AZURE_DEVOPS_TOKEN)'
+      AttachmentName: 'Report-$(Build.BuildNumber).zip'
+      PathWhereTheFileIsLocated: '$(System.DefaultWorkingDirectory)/target/gatling/'
+      PageWikiName: 'Reports/Gatling'
+
+  - task: az-pipelines-2-sharepoint@0
+    inputs:
+      driveId: 'https://intellego365.sharepoint.com/sites/Celula_Testing/Documentos%20compartidos'
+      targetFolder: 'Pruebas_no_Funcionales/Pruebas_Performance/Celula_Testing/Gatling/$(Build.BuildNumber)'
+      sourceFolder: '$(System.DefaultWorkingDirectory)/target/gatling'
+      contents: 'Report-$(Build.BuildNumber).zip'
+      conflictBehaviour: 'replace'
+      cleanTargetFolder: false
+      flattenFolders: false
+      failOnEmptySource: false
+      clientId: $(AD_CLIENT_ID)
+      clientSecret: $(AD_CLIENT_SECRET)
+      tenantId:  $(AD_TENANT_ID)
+
+  - task: SendEmail@2
+    inputs:
+      To: '25_celula_testing@axity.com'
+      From: '$(SMTP_USERNAME)'
+      Subject: 'Resultado Gatling - $(Build.BuildNumber)'
+      Body: 'Se ejecutaron pruebas de Gatling. Se anexa ZIP con reporte. Visitar: https://intellego365.sharepoint.com/:f:/r/sites/Celula_Testing/Documentos%20compartidos/Pruebas_no_Funcionales/Pruebas_Performance/Celula_Testing/Gatling/$(Build.BuildNumber)?csf=1&web=1&e=BaACCL'
+      BodyAsHtml: false
+      AddAttachment: false
+      SmtpServer: 'smtp-mail.outlook.com'
+      UseSSL: false
+      SmtpUsername: '$(SMTP_USERNAME)'
+      SmtpPassword: '$(SMTP_PASSWORD)'
+      SmtpPort: 587
+
+- job: RollbackJobGatling
+  displayName: 'Rollback Gatling Job'
+  dependsOn: GatlingTestJob
+  condition: failed()
+  pool:
+    vmImage: 'windows-latest'
+  steps:
+  - task: TriggerPipeline@2
+    inputs:
+      serviceConnection: 'AZDO_CELULA'
+      project: '3eecf6e6-d6b8-49ba-ade1-0b0a469fd1b0'
+      Pipeline: 'Release'
+      releaseDefinition: '4'
+      buildapiversion: '7.1-preview.7'
+      releaseapiversion: '7.1-preview.8'
