@@ -12,8 +12,8 @@ import static io.gatling.javaapi.http.HttpDsl.*;
 public class LoginSimulation extends Simulation {
 
     //se define la url sin los endpoint y los datos a enviar
-    int nbUser = Integer.getInteger("users", 1);
-    int myRamp = Integer.getInteger("ramp", 10); // evita 0s
+    int nbUser = Integer.parseInt(System.getProperty("users", "1"));
+    int myRamp = Integer.parseInt(System.getProperty("ramp", "10"));
 
     String baseURL = System.getProperty("BASE_URL", "https://opensource-demo.orangehrmlive.com");
 
@@ -32,9 +32,9 @@ public class LoginSimulation extends Simulation {
         )
                 .protocols(httpProtocol)
                 .assertions(
-                        global().failedRequests().count().is(0L),                // Se cuenta el numero de request fallidos
-                        global().successfulRequests().percent().gt(99.0),        // se revisa por porcentaje
-                        global().responseTime().percentile3().lt(1500),          // se revisa tiempo de respuesta
+                        forAll().failedRequests().count().is(0L),                // Se cuenta el numero de request fallidos
+                        forAll().successfulRequests().percent().gt(99.0),        // se revisa por porcentaje
+                        forAll().responseTime().percentile3().lt(1500),          // se revisa tiempo de respuesta
                         forAll().responseTime().max().lt(3000)              // Se revisa que el tiempo maximo no sea de 3s
 
                 );
